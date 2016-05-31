@@ -20,6 +20,7 @@ gem 'metriks',         '0.9.9.6'
 gem 'metriks-librato_metrics', github: 'eric/metriks-librato_metrics'
 
 gem 'nokogiri'
+gem 'redis', '~>3.2'
 
 group :test do
   gem 'rspec'

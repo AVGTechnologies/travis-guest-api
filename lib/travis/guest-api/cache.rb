@@ -1,57 +1,42 @@
 require 'active_support/core_ext/numeric/time'
+require 'redis'
 
 module Travis::GuestAPI
   # Remembers steps by their jobs so that
   # they can be  provided in route GET steps/:uuid
   # for backward compatibility.
   class Cache
-    def initialize(max_job_time = 24.hours, gc_polling_interval = 1.hour)
-      @cache = {}
+    def initialize(max_job_time = 24.hours)
       @max_job_time = max_job_time
       @mutex = Mutex.new
-      initialize_garbage_collector gc_polling_interval
-    end
-
-    def initialize_garbage_collector(polling_interval)
-      @thread = Thread.new do
-        begin
-          loop do
-            Travis.logger.debug "Next step cache GC in #{polling_interval} seconds."
-            sleep polling_interval.to_i # fails in jruby without to_i
-            gc
-          end
-        rescue StandardError => e
-          Travis.logger.error "Step Cache GC exploded: #{e.class}: #{e.message}"
-          raise e
-        end
-      end
+      @redis = Redis.new
     end
 
     def set(job_id, step_uuid, result)
       fail ArgumentError, 'Parameter "result" must be a hash' unless
         result.is_a?(Hash)
-
+      job_record = {}
       @mutex.synchronize do
-        @cache[job_id] ||= {}
-        @cache[job_id][:last_time_used] = Time.now
-        @cache[job_id][step_uuid] ||= {}
-        @cache[job_id][step_uuid].deep_merge!(result)
+        job_record = get_job(job_id) || {}
+        job_record[step_uuid] ||= {}
+        job_record[step_uuid].deep_merge!(result)
+        set_job(job_id, job_record)
       end
 
-      @cache[job_id][step_uuid]
+      job_record[step_uuid]
     end
 
     def get(job_id, step_uuid)
-      return nil unless @cache[job_id]
-      @cache[job_id][:last_time_used] = Time.now
-      @cache[job_id][step_uuid]
+      job_record = get_job(job_id)
+      return nil unless job_record
+      job_record[step_uuid]
     end
 
     def get_result(job_id)
-      return 'errored' unless @cache[job_id]
+      job_record = get_job(job_id)
+      return 'errored' unless job_record
       result = 'passed'
-      @cache[job_id].each do |key, step_result|
-        next if key == :last_time_used
+      job_record.each do |key, step_result|
         if step_result['result'].to_s.downcase == 'failed'
           result = 'failed'
           break
@@ -61,35 +46,36 @@ module Travis::GuestAPI
     end
 
     def exists?(job_id)
-      return !!@cache[job_id]
+      job_record = get_job(job_id)
+      !job_record.nil?
     end
 
     def delete(job_id)
       @mutex.synchronize do
         Travis.logger.info "Deleting #{job_id} from cache"
-        @cache.delete job_id
+        @redis.del job_id
       end
-    end
-
-    def gc
-      Travis.logger.debug 'Starting cache garbage collector'
-      expired_time = Time.now - @max_job_time
-      Travis.logger.debug expired_time.to_s
-      @cache.keys.each do |job_id|
-        delete(job_id) if @cache[job_id][:last_time_used] < expired_time
-      end
-      Travis.logger.debug 'Garbage collector finished'
     end
 
     # Use only if you will never ever use this class again
     #
     def finalize
       @mutex.synchronize do
-        Thread.kill(@thread) if @thread
-        @cache = {}
+        @redis.flushdb
       end
     end
 
-    private :initialize_garbage_collector, :gc
+    private
+
+    def get_job(id)
+      job_string = @redis.get(id)
+      return nil unless job_string
+      JSON.parse(job_string)
+    end
+
+    def set_job(job_id, job)
+      @redis.set(job_id, job.to_json)
+      @redis.expire(job_id, @max_job_time)
+    end
   end
 end

@@ -7,7 +7,7 @@ require 'timeout'
 describe Travis::GuestAPI::Cache do
   let(:max_job_time) { 5.minutes }
   let(:gc_polling_interval) { 5.minutes }
-  let(:cache) { Travis::GuestAPI::Cache.new max_job_time, gc_polling_interval }
+  let(:cache) { Travis::GuestAPI::Cache.new max_job_time }
   let(:test_uuid) { 'ffdec891-ac4d-4187-a228-3edbe474c775' }
 
   after(:each) { cache.finalize }
@@ -15,26 +15,26 @@ describe Travis::GuestAPI::Cache do
   describe '#set' do
     it 'persists given value' do
       job_id = 42
-      result = { foo: 'test result' }
+      result = { 'foo' => 'test result' }
       cache.set job_id, test_uuid, result
       expect(cache.get job_id, test_uuid).to eq result
     end
 
     it 'performs recusive update' do
       job_id = 42
-      cache.set job_id, test_uuid, { test_data: { v1: 1 } }
-      cache.set job_id, test_uuid, { test_data: { v2: 2 } }
+      cache.set job_id, test_uuid, 'test_data' => { v1: 1 }
+      cache.set job_id, test_uuid, 'test_data' => { v2: 2 }
       expect(cache.get job_id, test_uuid).to eq (
-        { test_data: { v1: 1, v2: 2 } }
+        { 'test_data' => { 'v1' => 1, 'v2' => 2 } }
       )
     end
 
     it 'returns cached value' do
       job_id = 42
-      cache.set job_id, test_uuid, { test_data: { v1: 1 } }
-      res = cache.set job_id, test_uuid, { test_data: { v2: 2 } }
+      cache.set job_id, test_uuid, { 'test_data' => { 'v1' => 1 } }
+      res = cache.set job_id, test_uuid, { 'test_data' => { 'v2' => 2 } }
       expect(res).to eq (
-        { test_data: { v1: 1, v2: 2 } }
+        { 'test_data' => { 'v1' => 1, 'v2' => 2 } }
       )
     end
 
@@ -52,7 +52,7 @@ describe Travis::GuestAPI::Cache do
 
       it 'returns Nil' do
         job_id = 666
-        cache.set job_id, test_uuid, foo: 'bar'
+        cache.set job_id, test_uuid, 'foo' => 'bar'
         sleep 0.2
         expect(cache.get job_id, test_uuid).to be_nil
       end
@@ -61,7 +61,7 @@ describe Travis::GuestAPI::Cache do
     context 'record alive' do
       it 'returns record' do
         job_id = 666
-        record = { foo: 'bar' }
+        record = { 'foo' => 'bar' }
         cache.set job_id, test_uuid, record
         expect(cache.get job_id, test_uuid).to eq record
       end

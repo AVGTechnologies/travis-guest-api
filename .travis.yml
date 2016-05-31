@@ -6,5 +6,8 @@ env:
 cache: bundler
 
 rvm:
- - "jruby-1.7.19"
- - "2.2.2"
+  - "jruby-1.7.19"
+  - "2.2.2"
+
+services:
+  - redis-server
