@@ -9,6 +9,8 @@ describe Travis::GuestAPI::Cache do
   let(:gc_polling_interval) { 5.minutes }
   let(:cache) { Travis::GuestAPI::Cache.new max_job_time, Travis.config.redis }
   let(:step_uuid) { 'ffdec891-ac4d-4187-a228-3edbe474c775' }
+  let(:step_uuid2) { 'ffdec891-ac4d-4187-a228-3edbe474c575' }
+  let(:step_uuid3) { 'ffdec891-ac4d-4187-a228-3edbe4740575' }
 
   after(:each) { cache.finalize }
 
@@ -124,6 +126,28 @@ describe Travis::GuestAPI::Cache do
   describe "#get_result" do
     it "returns 'errored' when no result set" do
       expect(cache.get_result(123456)).to eq 'errored'
+    end
+
+    it "returns 'errored' when only one step result exists and is created" do
+      job_id = 22
+      cache.set job_id, step_uuid, { 'result' => 'created'}
+      expect(cache.get_result(job_id)).to eq 'errored'
+    end
+
+    it "returns 'errored' when one step result is created" do
+      job_id = 22
+      cache.set job_id, step_uuid, { 'result' => 'created'}
+      cache.set job_id, step_uuid2, { 'result' => 'failed'}
+      cache.set job_id, step_uuid3, { 'result' => 'passed'}
+      expect(cache.get_result(job_id)).to eq 'errored'
+    end
+
+    it "returns 'errored' when all step results are created" do
+      job_id = 22
+      cache.set job_id, step_uuid, { 'result' => 'created'}
+      cache.set job_id, step_uuid2, { 'result' => 'created'}
+      cache.set job_id, step_uuid3, { 'result' => 'created'}
+      expect(cache.get_result(job_id)).to eq 'errored'
     end
 
     it "reutrns passed when any test_step was set (event without result)" do
