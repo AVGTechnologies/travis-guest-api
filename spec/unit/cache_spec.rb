@@ -122,30 +122,35 @@ describe Travis::GuestAPI::Cache do
   end
 
   describe "#get_result" do
-    it "returns 'errored' when no result set" do
-      expect(cache.get_result(123456)).to eq 'errored'
+    it "returns 'failed' when no result set" do
+      expect(cache.get_result(123456)).to eq 'failed'
     end
 
-    it "reutrns passed when any test_step was set (event without result)" do
+    it "returns 'failed' when any test_step was set (event without result)" do
       cache.set 123, step_uuid, {}
-      expect(cache.get_result(123)).to eq 'passed'
+      expect(cache.get_result(123)).to eq 'failed'
     end
 
-    it "returns 'passed' to any result value expect 'failed'" do
+    it "returns 'passed' to result values 'passed' and 'pending'" do
       cache.set 123, step_uuid, { 'result' => 'pending'}
       expect(cache.get_result(123)).to eq 'passed'
-      cache.set 123, step_uuid, { 'result' => 'broken'}
+      cache.set 123, step_uuid, { 'result' => 'passed'}
       expect(cache.get_result(123)).to eq 'passed'
     end
 
-    it "reutrns failed when any test_step was failed" do
+    it "returns 'failed' to result values 'blocked' and 'created'" do
+      cache.set 123, step_uuid, { 'result' => 'blocked'}
+      expect(cache.get_result(123)).to eq 'failed'
+      cache.set 123, step_uuid, { 'result' => 'created'}
+      expect(cache.get_result(123)).to eq 'failed'
+    end
+
+    it "returns 'failed' when any test_step was failed" do
       cache.set 123, SecureRandom.uuid, { 'result' => 'passed'}
       cache.set 123, SecureRandom.uuid, { 'result' => 'failed'}
       cache.set 123, SecureRandom.uuid, { 'result' => 'passed'}
       expect(cache.get_result(123)).to eq 'failed'
     end
-
-
   end
-
 end
+

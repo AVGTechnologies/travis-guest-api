@@ -47,7 +47,7 @@ def handle_payload(payload)
     Travis.logger.info "Started job_id=#{job_id}"
   when 'finished'
     payload[:reporter].send_last_tresult(job_id)
-    result  = payload[:result] || Travis::GuestApi.cache.get_result(job_id)
+    result  = Travis::GuestApi.cache.get_result(job_id)
     payload[:reporter].notify_job_finished(job_id, result)
     Travis::GuestApi.cache.delete(job_id)
     Travis.logger.info "Finished job_id=#{job_id} with result=#{result}"
