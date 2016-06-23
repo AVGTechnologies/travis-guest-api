@@ -52,6 +52,10 @@ module Travis::GuestAPI
     def get_result(job_id)
       job_record = get_job(job_id)
       return 'errored' unless job_record
+      return 'errored' if job_record.values.any? do |item|
+        item['result'].to_s.downcase == 'created'
+      end
+
       result = 'passed'
       job_record.each do |key, step_result|
         if step_result['result'].to_s.downcase == 'failed'
