@@ -51,15 +51,23 @@ module Travis::GuestAPI
 
     def get_result(job_id)
       job_record = get_job(job_id)
-      return 'errored' unless job_record
-      result = 'passed'
-      job_record.each do |key, step_result|
-        if step_result['result'].to_s.downcase == 'failed'
-          result = 'failed'
-          break
-        end
+      return 'failed' unless job_record
+
+      passed = job_record.all? do |key, step_result|
+        ['passed', 'pending'].include? step_result['result']
       end
-      result
+
+      return passed ? 'passed' : 'failed'
+
+      # result = 'passed'
+      # job_record.each do |key, step_result|
+      #   if step_result['result'].to_s.downcase == 'failed'
+      #     result = 'failed'
+      #     break
+      #   end
+      # end
+      # result
+
     end
 
     def exists?(job_id)
