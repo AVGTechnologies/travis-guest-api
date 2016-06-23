@@ -74,6 +74,8 @@ class Travis::GuestApi::App::Endpoint
           error: 'UUID is mandatory!'
         }.to_json unless step['uuid']
 
+        step = rewrite_legacy_step_result(step)
+
         step.slice(
           'uuid',
           'result',
@@ -104,6 +106,33 @@ class Travis::GuestApi::App::Endpoint
       @reporter.send_tresult_update(@job_id, steps)
       steps = steps.first if !(Array === env['rack.parser.result'])
       steps.to_json
+    end
+
+    private
+
+    def  old_step_rewrite_map
+      {
+        'KnownBug' => { rewrite_result: 'failed', status: 'known_bug' },
+        'Skipped' => { rewrite_result: 'pending', status: 'skipped' },
+        'NotPerformed' => { rewrite_result: 'pending', status: 'not_performed' },
+        'NotTested' => { rewrite_result: 'blocked', status: nil },
+        'NotSet' => { rewrite_result: 'created', status: nil },
+        'Passed' => { rewrite_result: 'passed', status: nil },
+        'Failed' => { rewrite_result: 'failed', status: nil }
+      }
+    end
+
+    def rewrite_legacy_step_result(step)
+      result = step['result']
+      if old_step_rewrite_map.keys.include?(result)
+        step['data'] ||= {}
+        if old_step_rewrite_map[result][:status]
+          step['data']['status'] = old_step_rewrite_map[result][:status]
+        end
+        step['result']  = old_step_rewrite_map[result][:rewrite_result]
+      end
+
+      step
     end
   end
 end
