@@ -234,6 +234,98 @@ module Travis::GuestApi
             ]
           end
         end
+
+        context 'old step result' do
+          let(:test_step_created) {
+            {
+              'job_id'    => 1,
+              'name'      => 'stepName1',
+              'classname' => 'caseName1',
+              'result'    => 'created'
+            }
+          }
+
+          let(:created_step_uuid) { create_step(test_step_created) }
+
+          let(:test_step_result) do
+            {
+              'uuid' => created_step_uuid,
+              'job_id'    => 1,
+              'name'      => 'stepName1',
+              'classname' => 'caseName1',
+              'number'  => 1,
+            }
+          end
+
+          let(:results_by_state) do
+            {
+              'KnownBug' => { 'result' => 'failed', 'data' => { 'status' => 'known_bug' }},
+              'Skipped' => { 'result' => 'pending', 'data' => { 'status' => 'skipped' }},
+              'NotPerformed' => { 'result' => 'pending', 'data' => { 'status' => 'not_performed' }},
+              'Blocked' => { 'result' => 'blocked', 'data' => {}},
+              'NotSet' => { 'result' => 'created', 'data' => {}},
+              'NotTested' => { 'result' => 'blocked', 'data' => {}},
+              'Passed' => { 'result' => 'passed', 'data' => {}},
+              'Failed' => { 'result' => 'failed', 'data' => {}},
+              'Unknown' => { 'result' => 'Unknown' },
+              'Created' => { 'result' => 'created', 'data' => {}}
+            }
+          end
+
+          def send_request(update_request)
+            put "/api/v2/steps/#{created_step_uuid}",
+                update_request.to_json,
+                'CONTENT_TYPE' => 'application/json'
+          end
+
+          def create_expect_result(name)
+            test_step_result.merge(results_by_state[name])
+          end
+
+          before :each do
+            expect(reporter).to receive(:send_tresult_update)
+          end
+
+          it 'rewrites NotSet -> created' do
+            send_request(result: 'NotSet')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'NotSet'
+          end
+
+          it 'rewrites NotTested -> blocked' do
+            send_request(result: 'NotTested')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'NotTested'
+          end
+
+          it 'rewrites Passed -> passed' do
+            send_request(result: 'Passed')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'Passed'
+          end
+
+          it 'rewrites Failed -> failed' do
+            send_request(result: 'Failed')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'Failed'
+          end
+
+          it 'rewrites KnownBug -> failed with data.status="known_bug"' do
+            send_request(result: 'KnownBug')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'KnownBug'
+          end
+
+          it 'rewrites NotPerformed -> pending with data.status="not_performed"' do
+            send_request(result: 'NotPerformed')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'NotPerformed'
+          end
+
+          it 'rewrites Skipped -> pending with data.status="skipped"' do
+            send_request(result: 'Skipped')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'Skipped'
+          end
+
+          it 'ignores unknown result' do
+            send_request(result: 'Unknown')
+            expect(JSON.parse last_response.body).to eq create_expect_result 'Unknown'
+          end
+        end
       end
     end
   end
