@@ -2,6 +2,7 @@ sentry: &sentry
   dsn: https://tok:en@app.getsentry.com/app_id
 
 production:
+  max_log_size: 42
   amqp:
     host: messaging.megacorp.local
     port: 5672
@@ -17,6 +18,7 @@ production:
 
 development:
   log_level: :debug
+  max_log_size: 42
   amqp:
     host: localhost
     port: 5672
@@ -35,4 +37,3 @@ test:
     vhost: travisci.development
   redis:
     url: redis://localhost:6379/13
-

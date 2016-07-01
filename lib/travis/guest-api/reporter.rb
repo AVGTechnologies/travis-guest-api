@@ -17,6 +17,9 @@ module Travis
         @state_publisher = state_publisher
         @log_publisher = log_publisher
         @test_result_publisher = test_result_publisher
+
+        @jobs_messages_sizes = {}
+
         reset
       end
 
@@ -61,9 +64,28 @@ module Travis
       # simple helpers
       def send_log(job_id, output, last_message = false)
         @logs_part_number += 1
-        message = { id: job_id, log: output, number: @logs_part_number }
-        message[:final] = true if last_message
-        notify('job:test:log', message)
+
+        @jobs_messages_sizes[job_id] ||= {}
+        @jobs_messages_sizes[job_id][:size] ||= 0
+        @jobs_messages_sizes[job_id][:size] += output.size
+
+        max_log_size = (Travis.config.max_log_size || 1024*5)
+
+        if @jobs_messages_sizes[job_id][:size] > max_log_size
+          if @jobs_messages_sizes[job_id][:message_truncated]
+            output = ''
+          else
+            Travis.logger.info "Messages exceeded limit size: #{max_log_size} for #{job_id}"
+            output = "Messages exceeded limit size: #{max_log_size}"
+            @jobs_messages_sizes[job_id][:message_truncated] = true
+          end
+        end
+
+        if output.size > 0 || last_message
+          message = { id: job_id, log: output, number: @logs_part_number }
+          message[:final] = true if last_message
+          notify('job:test:log', message)
+        end
       end
 
       def send_last_log(job_id)
