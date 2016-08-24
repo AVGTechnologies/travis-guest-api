@@ -31,11 +31,11 @@ class Travis::GuestApi::App::Middleware
       end
 
       before '/machines/steps/:uuid', method: :put do
-        rewrite_put_steps_v1
+        rewrite_steps_v1
       end
 
       before '/machines/steps/:uuid', method: :patch do
-        rewrite_put_steps_v1
+        rewrite_steps_v1
       end
 
 
@@ -114,9 +114,8 @@ class Travis::GuestApi::App::Middleware
       request.delete_param(:stepStack)
     end
 
-    def rewrite_put_steps_v1
+    def rewrite_steps_v1
       env['PATH_INFO'] = "#{V2_PREFIX}/steps/#{params[:uuid]}"
-      env['REQUEST_METHOD'] = 'PUT'
       rewrite_job_id_v1
       request.delete_param(:stepStack)
     end

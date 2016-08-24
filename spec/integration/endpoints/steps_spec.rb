@@ -31,6 +31,23 @@ module Travis::GuestApi
         }
       }
 
+      let(:testcase_created) {
+        {
+          'job_id'    => 1,
+          'name'      => 'stepName1',
+          'classname' => 'caseName1',
+          'result'    => 'created'
+        }
+      }
+      let(:testcase) {
+        {
+          'job_id'    => 1,
+          'name'      => 'stepName1',
+          'classname' => 'caseName1',
+          'result'    => 'success'
+        }
+      }
+
       let(:testcase_with_data) {
         {
           'name'      => 'stepName2',
@@ -151,9 +168,40 @@ module Travis::GuestApi
         end
       end
 
+      RSpec.shared_examples 'put & patch shared, step does not exists' do | method |
+        it 'returns 403 if step does not exist' do
+          self.send method, '/api/v2/steps/i_dont_exist', testcase.to_json, 'CONTENT_TYPE' => 'application/json'
+          expect(last_response.status).to eq 403
+        end
+      end
+
+      describe 'PATCH /steps/:uuid?' do
+          it_should_behave_like 'put & patch shared, step does not exists', 'patch'
+
+          it 'modifies already updated step' do
+            step_uuid = create_step(testcase)
+            update_request = { result: 'updated result' }
+            expect(reporter).to receive(:send_tresult_update)
+            patch "/api/v2/steps/#{step_uuid}",
+              update_request.to_json,
+              'CONTENT_TYPE' => 'application/json'
+            expected_testcase = testcase.dup
+            expected_testcase.delete 'job_id'
+            expected_testcase['result'] = update_request[:result]
+            expected_testcase['uuid'] = step_uuid
+            expected_testcase['job_id'] = 1
+            expected_testcase['number'] = 1
+            expect(last_response.status).to eq 200
+            expect(JSON.parse last_response.body).to eq expected_testcase
+          end
+
+      end
+
       describe 'PUT /steps/:uuid?' do
-        it 'modifies existing step' do
-          step_uuid = create_step(testcase)
+        it_should_behave_like 'put & patch shared, step does not exists', 'put'
+
+        it 'modifies existing step if created' do
+          step_uuid = create_step(testcase_created)
           update_request = { result: 'updated result' }
           expect(reporter).to receive(:send_tresult_update)
           put "/api/v2/steps/#{step_uuid}",
@@ -169,70 +217,101 @@ module Travis::GuestApi
           expect(JSON.parse last_response.body).to eq expected_testcase
         end
 
-        it 'returns 403 when updating name' do
-          step_uuid = create_step(testcase)
-          update_request = { name: 'new name' }
-          put "/api/v2/steps/#{step_uuid}",
-              update_request.to_json,
-              'CONTENT_TYPE' => 'application/json'
-          expect(last_response.status).to eq 403
+        it 'does not modified existing step if is not created' do
+            step_uuid = create_step(testcase)
+            update_request = { result: 'updated result' }
+            expect(reporter).not_to receive(:send_tresult_update)
+            put "/api/v2/steps/#{step_uuid}",
+                update_request.to_json,
+                'CONTENT_TYPE' => 'application/json'
+            expected_testcase = testcase.dup
+            expect(last_response.status).to eq 400
+
         end
 
         it 'returns 403 when updating classname' do
-          step_uuid = create_step(testcase)
-          update_request = { classname: 'new classname' }
-          put "/api/v2/steps/#{step_uuid}",
-              update_request.to_json,
-              'CONTENT_TYPE' => 'application/json'
-          expect(last_response.status).to eq 403
-        end
-
-        it 'returns 403 if step does not exist' do
-          put '/api/v2/steps/i_dont_exist',
-              testcase.to_json,
-              'CONTENT_TYPE' => 'application/json'
-          expect(last_response.status).to eq 403
+            step_uuid = create_step(testcase)
+            update_request = { classname: 'new classname' }
+            put "/api/v2/steps/#{step_uuid}",
+                update_request.to_json,
+                'CONTENT_TYPE' => 'application/json'
+            expect(last_response.status).to eq 403
         end
 
         context 'bulk update' do
           let(:testcase1) {
-            { 'name' => 'stepName1', 'classname' =>  'testCaseName1' }
+            { 'name' => 'stepName1', 'classname' =>  'testCaseName1', 'result' => 'created' }
           }
           let(:testcase2) {
-            { 'name' => 'stepName2', 'classname' =>  'testCaseName2' }
+            { 'name' => 'stepName2', 'classname' =>  'testCaseName2', 'result' => 'created' }
           }
-          it 'updates several steps' do
-            step_uuid1 = create_step(testcase1)
-            step_uuid2 = create_step(testcase2)
-            update_request = [
-              { 'uuid' => step_uuid1, 'result' => 'success' },
-              { 'uuid' => step_uuid2, 'result' => 'failed' }
-            ]
+          let(:testcase3) {
+            { 'name' => 'stepName1', 'classname' =>  'testCaseName1', 'result' => 'success' }
+          }
+          let(:testcase4) {
+            { 'name' => 'stepName2', 'classname' =>  'testCaseName2', 'result' => 'failed' }
+          }
 
-            expect(reporter).to receive(:send_tresult_update) do |job_id, arg|
-              expect(arg.count).to eq 2
+          RSpec.shared_examples 'put&patch, update several steps' do | method, tcs, des, code |
+            it des do
+              testcases = { 'tcs12' => [testcase1, testcase2], 'tcs34' => [testcase3, testcase4]}
+              step_uuid1 = create_step(testcases[tcs][0])
+              step_uuid2 = create_step(testcases[tcs][1])
+              update_request = [
+                { 'uuid' => step_uuid1, 'result' => 'success' },
+                { 'uuid' => step_uuid2, 'result' => 'failed' }
+              ]
 
-              expect(arg[0]['uuid']).to eq step_uuid1
-              expect(arg[0]['result']).to eq 'success'
-              expect(arg[0]['number']).to eq 1
+              expect(reporter).to receive(:send_tresult_update) do |job_id, arg|
+                expect(arg.count).to eq 2
 
-              expect(arg[1]['uuid']).to eq step_uuid2
-              expect(arg[1]['result']).to eq 'failed'
-              expect(arg[1]['number']).to eq 1
+                expect(arg[0]['uuid']).to eq step_uuid1
+                expect(arg[0]['result']).to eq 'success'
+                expect(arg[0]['number']).to eq 1
+
+                expect(arg[1]['uuid']).to eq step_uuid2
+                expect(arg[1]['result']).to eq 'failed'
+                expect(arg[1]['number']).to eq 1
+              end
+
+              self.send method, "/api/v2/steps", update_request.to_json, 'CONTENT_TYPE' => 'application/json'
+              expect(last_response.status).to eq code
+              expect(JSON.parse last_response.body).to eq [
+                testcase1.update(update_request[0]).update(
+                  'job_id' => 1, 'number' => 1),
+                testcase2.update(update_request[1]).update(
+                  'job_id' => 1, 'number' => 1)
+              ]
             end
+          end
+
+          it_should_behave_like 'put&patch, update several steps',
+            'put',
+            'tcs12',
+            'updates several steps if are created',
+            200
+
+          it 'does not updates several steps if are not created' do
+            step_uuid1 = create_step(testcase3)
+            step_uuid2 = create_step(testcase4)
+            update_request = [
+              { 'uuid' => step_uuid1, 'result' => 'passed' },
+              { 'uuid' => step_uuid2, 'result' => 'pending' }
+            ]
 
             put "/api/v2/steps",
                 update_request.to_json,
                 'CONTENT_TYPE' => 'application/json'
 
-            expect(last_response.status).to eq 200
-            expect(JSON.parse last_response.body).to eq [
-              testcase1.update(update_request[0]).update(
-                'job_id' => 1, 'number' => 1),
-              testcase2.update(update_request[1]).update(
-                'job_id' => 1, 'number' => 1)
-            ]
+            expect(last_response.status).to eq 400
           end
+
+          it_should_behave_like 'put&patch, update several steps',
+            'patch',
+            'tcs34',
+            'update several already updates steps',
+            200
+
         end
 
         context 'old step result' do
