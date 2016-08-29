@@ -45,6 +45,105 @@ describe Travis::GuestAPI::Cache do
     end
   end
 
+  describe '#get_added_step_metrics' do
+    let(:job_id) { 42 }
+    let(:sample_record) do
+      {
+        'classname' => 'foo_case_name',
+        'position' => 10,
+        'class_position' => 11
+      }
+    end
+
+    let(:sample_record2) do
+      {
+        'classname' => 'foo_case_name',
+        'position' => 10,
+        'class_position' => 11,
+        'added_step' => true,
+        'name' => 'garply_name'
+      }
+    end
+
+    it 'searches for given job' do
+      job_id = 55
+      expect(cache).to receive(:get_job) do
+        double(
+          'fake record',
+          values: {}
+        )
+      end
+
+      expect do
+        cache.get_added_step_metrics(job_id, 'foo_case_name', 'bar_step_name')
+      end.to raise_error (Travis::GuestAPI::Cache::AddStepException)
+    end
+
+    it 'returns correct step_position and class_position' do
+      cache.set job_id, 'some uuid', sample_record
+      metrics = cache.get_added_step_metrics(job_id, 'foo_case_name', 'bar_step_name')
+      expect(metrics).to include('step_position' => 11, 'class_position' => 11)
+    end
+
+    it 'raises exception when class is not found in cache' do
+      cache.set job_id, 'some uuid', sample_record
+      expect do
+        cache.get_added_step_metrics(job_id, 'foo_baz_qux_case_name', 'bar_step_name')
+      end.to raise_error (Travis::GuestAPI::Cache::AddStepException)
+    end
+
+    it 'raises exception when class_position is not found in cache' do
+      sample_record = {
+        'classname' => 'foo_case_name',
+        'position' => 10,
+        'class_position_' => 11
+      }
+
+      cache.set job_id, 'some uuid', sample_record
+      expect do
+        cache.get_added_step_metrics(job_id, 'foo_case_name', 'bar_step_name')
+      end.to raise_error (Travis::GuestAPI::Cache::AddStepException)
+    end
+
+    context 'test case scope' do
+      it 'raises exception when step name is already present in cache' do
+        cache.set job_id, 'some uuid', sample_record2
+        expect do
+          cache.get_added_step_metrics(job_id, 'foo_case_name', 'garply_name')
+        end.to raise_error (Travis::GuestAPI::Cache::AddStepException)
+      end
+    end
+
+    context 'job scope' do
+      it 'raises exception when step name is already present in cache' do
+
+        sample_record2['name'] = 'qux_name'
+
+        cache.set job_id, 'some uuid', sample_record2
+
+        sample_record = {
+          'classname' => 'quux_case_name',
+          'position' => 10,
+          'class_position' => 11,
+          'added_step' => true,
+          'name' => 'garply_name'
+        }
+
+        cache.set job_id, 'some uuid2', sample_record
+
+        expect do
+          cache.get_added_step_metrics(job_id, 'foo_case_name', 'garply_name')
+        end.to raise_error (Travis::GuestAPI::Cache::AddStepException)
+      end
+    end
+
+    it 'does not raise exception when the same static step name is already present in cache' do
+      sample_record['name'] = 'garply_name'
+      cache.set job_id, 'some uuid', sample_record
+      cache.get_added_step_metrics(job_id, 'foo_case_name', 'garply_name')
+    end
+  end
+
   describe '#set_multiple' do
     it 'persists given value' do
       job_id = 42
