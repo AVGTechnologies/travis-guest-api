@@ -1,3 +1,4 @@
+
 require 'travis/guest-api/app/endpoint'
 
 class Travis::GuestApi::App::Endpoint
@@ -79,6 +80,16 @@ class Travis::GuestApi::App::Endpoint
     # otherwise UUID should be specified in the route
     #
     put '/steps/?:uuid?' do
+       handle_steps_state_update
+     end
+
+    patch '/steps/?:uuid?' do
+       handle_steps_state_update(false)
+     end
+
+    private
+
+    def handle_steps_state_update(check_update = true)
       steps = env['rack.parser.result']
       steps = [ params ] unless (Array === env['rack.parser.result'])
 
@@ -104,6 +115,7 @@ class Travis::GuestApi::App::Endpoint
       steps.each do |step|
         cached_step = Travis::GuestApi.cache.get(@job_id, step['uuid'])
         not_found_uids << step['uuid'] unless cached_step
+        halt 400 if check_update && cached_step['result'] != 'created'
         step['number'] ||= ((cached_step || {})['number'] || 0)
         step['number'] += 1
       end
@@ -123,8 +135,6 @@ class Travis::GuestApi::App::Endpoint
       steps = steps.first if !(Array === env['rack.parser.result'])
       steps.to_json
     end
-
-    private
 
     def  old_step_rewrite_map
       {
