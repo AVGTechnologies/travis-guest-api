@@ -29,6 +29,7 @@ group :test do
   gem 'factory_girl',     '~> 2.6.0'
   gem 'database_cleaner', '~> 1.4.1'
   gem 'codeclimate-test-reporter', require: nil
+  gem 'fakeredis', '~> 0.6.0', :require => 'fakeredis/rspec'
 end
 
 group :development do

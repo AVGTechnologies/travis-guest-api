@@ -14,14 +14,33 @@ class Travis::GuestApi::App::Endpoint
       steps.map! do |step|
 
         halt 422, {
-          error: 'Keys name, classname are mandatory!'
+          error: 'Mandatory parameters `name` and `classname` need to be specified'
         }.to_json unless !step.nil? && step['name'] && step['classname']
+
         halt 422, {
-          error: 'UUID cannot be set!'
+          error: '`uuid` field is not allowed to be set'
         }.to_json if step['uuid']
+
 
         step['uuid'] = SecureRandom.uuid
         step['job_id'] = @job_id
+
+        unless step['position'] || step['class_position']
+          begin
+            new_metrics = Travis::GuestApi.cache.get_added_step_metrics(
+              @job_id,
+              step['classname'],
+              step['name']
+            )
+          rescue Travis::GuestAPI::Cache::AddStepException => e
+            halt 422, {
+              error: e.message
+            }.to_json
+          end
+          step['position'] ||= new_metrics['step_position']
+          step['class_position'] ||= new_metrics['class_position']
+          step['added_step'] = true
+        end
 
         res = step.slice(
           'uuid',
@@ -33,7 +52,8 @@ class Travis::GuestApi::App::Endpoint
           'result',
           'duration',
           'data',
-          'test_data'
+          'test_data',
+          'added_step'
         )
         res['number'] = 0
         res
